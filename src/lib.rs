@@ -17,6 +17,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod card;
 pub mod dfu;
+pub mod env;
 pub mod hub;
 pub mod note;
 pub mod web;
@@ -555,6 +556,10 @@ impl<IOM: I2c, const BUF_SIZE: usize>
     /// [card Requests](https://dev.blues.io/reference/notecard-api/card-requests/)
     pub fn card(&mut self) -> card::Card<'_, IOM, BUF_SIZE> {
         card::Card::from(self)
+    }
+
+    pub fn env(&mut self) -> env::Env<'_, IOM, BUF_SIZE> {
+        env::Env::from(self)
     }
 
     /// [note Requests](https://dev.blues.io/reference/notecard-api/note-requests/)

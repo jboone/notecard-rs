@@ -8,9 +8,9 @@ description = "A driver for the Blues.io Notecard"
 repository = "https://github.com/gauteh/notecard-rs"
 
 [dependencies]
-defmt = "1.0"
+defmt = "1.0.1"
 embedded-hal-async = "1.0"
-heapless = { version = "0.7", features = [ "serde", "ufmt-impl", "defmt-impl" ] }
+heapless = { version = "0.9", features = ["serde", "defmt"] }
 serde = { version = "1", features = ["derive"], default-features = false }
 serde-json-core = "0.5.1"
 

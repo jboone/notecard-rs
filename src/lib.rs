@@ -1,10 +1,8 @@
 //! Protocol for transmitting: <https://dev.blues.io/notecard/notecard-guides/serial-over-i2c-protocol/>
 //! API: <https://dev.blues.io/reference/notecard-api/introduction/>
 //!
-#![feature(type_changing_struct_update)]
 #![cfg_attr(not(test), no_std)]
 
-use core::convert::Infallible;
 use core::marker::PhantomData;
 
 #[allow(unused_imports)]
@@ -12,7 +10,7 @@ use defmt::{debug, error, info, trace, warn};
 
 use embedded_hal_async::delay::DelayNs;
 use embedded_hal_async::i2c::I2c;
-use heapless::{String, Vec};
+use heapless::{CapacityError, String, Vec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod card;
@@ -129,7 +127,7 @@ impl NoteError {
         NoteError::DeserError(s)
     }
 
-    pub fn string_err(_e: Infallible) -> NoteError {
+    pub fn string_err(_e: CapacityError) -> NoteError {
         NoteError::BufOverflow
     }
 }
@@ -217,7 +215,12 @@ impl<IOM: I2c, const BUF_SIZE: usize>
         } else {
             Ok(Notecard {
                 buf: Vec::<_, B>::from_slice(&self.buf).unwrap(),
-                ..self
+                i2c: self.i2c,
+                addr: self.addr,
+                state: self.state,
+                response_timeout: self.response_timeout,
+                chunk_delay: self.chunk_delay,
+                segment_delay: self.segment_delay,
             })
         }
     }

@@ -416,7 +416,7 @@ impl<IOM: I2c, const BUF_SIZE: usize>
 
     /// Read any remaining data from the Notecarrier. This will cancel any waiting responses, and
     /// waiting for a response after this call will time-out.
-    async unsafe fn consume_response(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
+    async fn consume_response(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
         warn!("note: trying to consume any left-over response.");
         let mut waited = 0;
 
@@ -452,7 +452,7 @@ impl<IOM: I2c, const BUF_SIZE: usize>
             debug!("note: handshake");
             if self.data_query().await? > 0 {
                 error!("note: handshake: remaining data in queue, consuming..");
-                unsafe { self.consume_response(delay).await? };
+                self.consume_response(delay).await?;
             }
 
             self.state = NoteState::Request;

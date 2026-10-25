@@ -3,8 +3,9 @@
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
 use embedded_hal::delay::DelayNs;
-use embedded_hal::i2c::I2c;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::ChannelBlocking;
 
 use super::{str_string, FutureResponse, NoteError, Notecard};
 
@@ -15,11 +16,11 @@ pub enum TemplateFormat {
     Compact,
 }
 
-pub struct Note<'a, IOM: I2c, const BS: usize> {
+pub struct Note<'a, IOM: ChannelBlocking, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: I2c, const BS: usize> Note<'a, IOM, BS> {
+impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Note<'_, IOM, BS> {
         Note { note }
     }

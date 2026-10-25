@@ -9,7 +9,10 @@ repository = "https://github.com/gauteh/notecard-rs"
 
 [dependencies]
 defmt = "1.0"
+embassy-time = { version = "0.5.1", git = "https://github.com/embassy-rs/embassy.git", features = ["defmt"] }
 embedded-hal = "1.0"
+embedded-io = { version = "0.7.1", default-features = false }
+embedded-io-async = { version = "0.7.0", default-features = false }
 heapless = { version = "0.7", features = [ "serde", "ufmt-impl", "defmt-impl" ] }
 serde = { version = "1", features = ["derive"], default-features = false }
 serde-json-core = "0.5.1"

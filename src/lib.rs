@@ -11,11 +11,13 @@ use core::marker::PhantomData;
 use defmt::{debug, error, info, trace, warn};
 
 use embedded_hal::delay::DelayNs;
-use embedded_hal::i2c::I2c;
 use heapless::{String, Vec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+use crate::channel::ChannelBlocking;
+
 pub mod card;
+pub mod channel;
 pub mod dfu;
 pub mod env;
 pub mod hub;
@@ -32,9 +34,6 @@ pub const DEFAULT_BUF_SIZE: usize = 18 * 1024;
 
 #[derive(Debug, defmt::Format)]
 pub struct NotecardConfig {
-    /// I2C address of Notecard.
-    pub i2c_addr: u8,
-
     /// Timeout while waiting for response (ms).
     pub response_timeout: u32,
 
@@ -59,7 +58,6 @@ pub struct NotecardConfig {
 impl Default for NotecardConfig {
     fn default() -> Self {
         NotecardConfig {
-            i2c_addr: 0x17,
             response_timeout: 5000,
             chunk_delay: 20,
             segment_delay: 250,
@@ -79,7 +77,7 @@ pub enum NoteState {
     Poll(usize),
 
     /// Reading response, value is remaining bytes.
-    Response(usize),
+    Response,
 
     /// Full response has been read into `buf`.
     ResponseReady,
@@ -166,47 +164,38 @@ impl From<NotecardError> for NoteError {
 
 /// The driver for the Notecard. Must be intialized before making any requests.
 pub struct Notecard<
-    IOM: I2c,
+    IOM: ChannelBlocking,
     const BUF_SIZE: usize = DEFAULT_BUF_SIZE,
 > {
-    i2c: IOM,
-    addr: u8,
+    channel: IOM,
     state: NoteState,
 
     /// The receive buffer. Must be large enough to hold the largest response that will be received.
     buf: Vec<u8, BUF_SIZE>,
 
     response_timeout: u32,
-    chunk_delay: u32,
-    segment_delay: u32,
 }
 
 pub struct SuspendState<const BUF_SIZE: usize> {
-    addr: u8,
     state: NoteState,
     buf: Vec<u8, BUF_SIZE>,
     response_timeout: u32,
-    chunk_delay: u32,
-    segment_delay: u32,
 }
 
-impl<IOM: I2c, const BUF_SIZE: usize>
+impl<IOM: ChannelBlocking, const BUF_SIZE: usize>
     Notecard<IOM, BUF_SIZE>
 {
-    pub fn new(i2c: IOM) -> Notecard<IOM, BUF_SIZE> {
-        Self::new_with_config(i2c, NotecardConfig::default())
+    pub fn new(channel: IOM) -> Notecard<IOM, BUF_SIZE> {
+        Self::new_with_config(channel, NotecardConfig::default())
     }
 
-    pub fn new_with_config(i2c: IOM, c: NotecardConfig) -> Notecard<IOM, BUF_SIZE> {
+    pub fn new_with_config(channel: IOM, c: NotecardConfig) -> Notecard<IOM, BUF_SIZE> {
         Notecard {
-            i2c,
-            addr: c.i2c_addr,
+            channel,
             state: NoteState::Handshake,
             buf: Vec::new(),
 
             response_timeout: c.response_timeout,
-            chunk_delay: c.chunk_delay,
-            segment_delay: c.segment_delay,
         }
     }
 
@@ -228,28 +217,22 @@ impl<IOM: I2c, const BUF_SIZE: usize>
     /// without using this state.
     pub fn suspend(self) -> (IOM, SuspendState<BUF_SIZE>) {
         (
-            self.i2c,
+            self.channel,
             SuspendState {
                 state: self.state,
                 buf: self.buf,
-                addr: self.addr,
                 response_timeout: self.response_timeout,
-                chunk_delay: self.chunk_delay,
-                segment_delay: self.segment_delay,
             },
         )
     }
 
     /// Resume a previously [`suspend`]ed Notecard driver.
-    pub fn resume(i2c: IOM, state: SuspendState<BUF_SIZE>) -> Notecard<IOM, BUF_SIZE> {
+    pub fn resume(channel: IOM, state: SuspendState<BUF_SIZE>) -> Notecard<IOM, BUF_SIZE> {
         Notecard {
-            i2c,
-            addr: state.addr,
+            channel,
             state: state.state,
             buf: state.buf,
             response_timeout: state.response_timeout,
-            chunk_delay: state.chunk_delay,
-            segment_delay: state.segment_delay,
         }
     }
 
@@ -263,44 +246,23 @@ impl<IOM: I2c, const BUF_SIZE: usize>
     ///
     /// > This is allowed no matter the state.
     pub fn ping(&mut self) -> bool {
-        self.i2c.write(self.addr, &[]).is_ok()
+        self.channel.ping()
     }
 
     /// Query the notecard for available bytes.
-    pub fn data_query(&mut self) -> Result<usize, NoteError> {
+    pub fn data_query(&mut self) -> Result<bool, NoteError> {
         trace!("note: data_query: {:?}", self.state);
-        if !matches!(self.state, NoteState::Response(_)) {
-            // Ask for reading, but with zero bytes allocated.
-            self.i2c
-                .write(self.addr, &[0, 0])
-                .map_err(|_| NoteError::I2cWriteError)?;
+        if !matches!(self.state, NoteState::Response) {
+            let read_ready = self.channel.read_ready().map_err(|_| NoteError::I2cReadError)?;
 
-            let mut buf = [0u8; 2];
-
-            // Read available bytes to read
-            self.i2c
-                .read(self.addr, &mut buf)
-                .map_err(|_| NoteError::I2cReadError)?;
-
-            let available = buf[0] as usize;
-            let sent = buf[1] as usize;
-
-            if available > 0 {
+            if read_ready {
                 self.buf.clear();
-                self.state = NoteState::Response(available);
+                self.state = NoteState::Response;
             }
 
-            trace!("avail = {}, sent = {}", available, sent);
+            trace!("read_ready = {}", read_ready);
 
-            if sent > 0 {
-                error!(
-                    "data query: bytes sent when querying available bytes: {}",
-                    sent
-                );
-                Err(NoteError::RemainingData)
-            } else {
-                Ok(available)
-            }
+            Ok(read_ready)
         } else {
             error!("note: data_query called while reading response.");
             Err(NoteError::WrongState)
@@ -308,44 +270,20 @@ impl<IOM: I2c, const BUF_SIZE: usize>
     }
 
     /// Read until empty.
-    fn read(&mut self) -> Result<usize, NoteError> {
-        if let NoteState::Response(avail) = self.state {
-            // Chunk to read + notecard header (2 bytes)
-            let mut bytes = Vec::<u8, 128>::new();
+    fn read(&mut self) -> Result<bool, NoteError> {
+        if let NoteState::Response = self.state {
+            let mut bytes = [0_u8; 256];
+            let bytes_read = self.channel.read(&mut bytes).map_err(|_| NoteError::I2cReadError)?;
+            self.buf.extend_from_slice(&bytes[..bytes_read]).unwrap(); // XXX: check enough space
 
-            let sz = (bytes.capacity() - 2).min(avail);
-            bytes.resize(sz + 2, 0).unwrap();
-
-            debug!("asking to read: {} of available {} bytes", sz, avail);
-
-            // Ask for reading `sz` bytes
-            self.i2c
-                .write(self.addr, &[0, sz as u8])
-                .map_err(|_| NoteError::I2cWriteError)?;
-
-            // Read bytes
-            self.i2c
-                .read(self.addr, &mut bytes)
-                .map_err(|_| NoteError::I2cReadError)?;
-
-            let available = bytes[0] as usize;
-            let sent = bytes[1] as usize;
-
-            self.buf.extend_from_slice(&bytes[2..]).unwrap(); // XXX: check enough space
-
-            trace!("read:  {}", unsafe {
-                core::str::from_utf8_unchecked(&bytes)
-            });
-
-            trace!("avail = {}, sent = {}", available, sent);
-
-            if available > 0 {
-                self.state = NoteState::Response(available);
+            let read_ready = self.channel.read_ready().map_err(|_| NoteError::I2cReadError)?;
+            if read_ready {
+                self.state = NoteState::Response;
             } else {
                 self.state = NoteState::ResponseReady;
             }
 
-            Ok(available)
+            Ok(read_ready)
         } else {
             error!("read: called when not waiting for response");
             Err(NoteError::WrongState)
@@ -377,9 +315,9 @@ impl<IOM: I2c, const BUF_SIZE: usize>
         match self.state {
             NoteState::Poll(_) => {
                 // 1. Check for available data
-                let sz = self.data_query()?;
-                if sz > 0 {
-                    debug!("response ready: {} bytes..", sz);
+                let read_ready = self.data_query()?;
+                if read_ready {
+                    debug!("response ready");
 
                     self.poll()
                 } else {
@@ -387,9 +325,9 @@ impl<IOM: I2c, const BUF_SIZE: usize>
                     Ok(None)
                 }
             }
-            NoteState::Response(_) => {
-                let avail = self.read()?;
-                if avail == 0 {
+            NoteState::Response => {
+                let read_ready = self.read()?;
+                if !read_ready {
                     self.poll()
                 } else {
                     // sleep and wait for more data.
@@ -443,7 +381,7 @@ impl<IOM: I2c, const BUF_SIZE: usize>
     fn handshake(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
         if matches!(self.state, NoteState::Handshake) {
             debug!("note: handshake");
-            if self.data_query()? > 0 {
+            if self.data_query()? {
                 error!("note: handshake: remaining data in queue, consuming..");
                 unsafe { self.consume_response(delay)? };
             }
@@ -455,22 +393,6 @@ impl<IOM: I2c, const BUF_SIZE: usize>
 
     /// Sends request from buffer.
     fn send_request(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
-        // This is presumably limited by the notecard firmware.
-        const CHUNK_LENGTH_MAX: usize = 127;
-        // This is a limit that was required on some Arduinos. Can probably be increased up to
-        // `CHUNK_LENGTH_MAX`. Should maybe be configurable.
-        const CHUNK_LENGTH_I: usize = 30;
-        const CHUNK_LENGTH: usize = if CHUNK_LENGTH_I < CHUNK_LENGTH_MAX {
-            CHUNK_LENGTH_I
-        } else {
-            CHUNK_LENGTH_MAX
-        };
-
-        // `note-c` uses `250` for `SEGMENT_LENGTH`. Round to closest divisible
-        // by CHUNK_LENGTH so that we don't end up with unnecessarily fragmented
-        // chunks. https://github.com/blues/note-c/blob/master/n_lib.h#L40 .
-        const SEGMENT_LENGTH: usize = (250 / CHUNK_LENGTH) * CHUNK_LENGTH;
-
         if !matches!(self.state, NoteState::Request) {
             warn!("note: request: wrong-state, resetting before new request.");
             let buf = self.buf.clone();
@@ -492,25 +414,7 @@ impl<IOM: I2c, const BUF_SIZE: usize>
             core::str::from_utf8_unchecked(&self.buf)
         });
 
-        let mut buf = Vec::<u8, { CHUNK_LENGTH + 1 }>::new();
-        for segment in self.buf.chunks(SEGMENT_LENGTH) {
-            for c in segment.chunks(buf.capacity() - 1) {
-                buf.push(c.len() as u8).unwrap();
-                buf.extend_from_slice(c).unwrap();
-
-                trace!("note: sending chunk: {} => {}", &buf, unsafe {
-                    core::str::from_utf8_unchecked(&buf)
-                });
-
-                self.i2c
-                    .write(self.addr, &buf)
-                    .map_err(|_| NoteError::I2cWriteError)?;
-
-                buf.clear();
-                delay.delay_ms(self.chunk_delay);
-            }
-            delay.delay_ms(self.segment_delay);
-        }
+        self.channel.write_all(&self.buf).map_err(|_| NoteError::I2cWriteError)?;
 
         self.state = NoteState::Poll(0);
 
@@ -598,7 +502,7 @@ impl<IOM: I2c, const BUF_SIZE: usize>
 pub struct FutureResponse<
     'a,
     T: DeserializeOwned,
-    IOM: I2c,
+    IOM: ChannelBlocking,
     const BUF_SIZE: usize,
 > {
     note: &'a mut Notecard<IOM, BUF_SIZE>,
@@ -608,7 +512,7 @@ pub struct FutureResponse<
 impl<
         'a,
         T: DeserializeOwned,
-        IOM: I2c,
+        IOM: ChannelBlocking,
         const BUF_SIZE: usize,
     > FutureResponse<'a, T, IOM, BUF_SIZE>
 {

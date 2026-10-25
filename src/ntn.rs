@@ -3,12 +3,13 @@
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
 use embedded_hal::delay::DelayNs;
-use embedded_hal::i2c::I2c;
 use serde::{Deserialize, Serialize};
+
+use crate::ChannelBlocking;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct NTN<'a, IOM: I2c, const BS: usize> {
+pub struct NTN<'a, IOM: ChannelBlocking, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
@@ -21,7 +22,7 @@ pub enum NtnSetGps {
     Starnote,
 }
 
-impl<'a, IOM: I2c, const BS: usize> NTN<'a, IOM, BS> {
+impl<'a, IOM: ChannelBlocking, const BS: usize> NTN<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> NTN<'_, IOM, BS> {
         NTN { note }
     }

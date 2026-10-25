@@ -1,14 +1,15 @@
 use embedded_hal::delay::DelayNs;
-use embedded_hal::i2c::I2c;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::ChannelBlocking;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct Env<'a, IOM: I2c, const BS: usize> {
+pub struct Env<'a, IOM: ChannelBlocking, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: I2c, const BS: usize> Env<'a, IOM, BS> {
+impl<'a, IOM: ChannelBlocking, const BS: usize> Env<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Env<'_, IOM, BS> {
         Env { note }
     }

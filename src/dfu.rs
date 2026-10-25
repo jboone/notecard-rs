@@ -3,16 +3,17 @@
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
-use embedded_hal_async::i2c::I2c;
 use serde::{Deserialize, Serialize};
+
+use crate::ChannelBlocking;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct DFU<'a, IOM: I2c, const BS: usize> {
+pub struct DFU<'a, IOM: ChannelBlocking, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: I2c, const BS: usize> DFU<'a, IOM, BS> {
+impl<'a, IOM: ChannelBlocking, const BS: usize> DFU<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> DFU<'_, IOM, BS> {
         DFU { note }
     }

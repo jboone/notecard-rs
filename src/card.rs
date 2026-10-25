@@ -5,11 +5,11 @@ use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
 use serde::{Deserialize, Serialize};
 
-use crate::ChannelAsync;
+use crate::channel::asynch::Channel;
 
 use super::{str_string, FutureResponse, NoteError, Notecard};
 
-pub struct Card<'a, IOM: ChannelAsync, const BS: usize> {
+pub struct Card<'a, IOM: Channel, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
@@ -64,7 +64,7 @@ impl GpioMode {
     }
 }
 
-impl<'a, IOM: ChannelAsync, const BS: usize> Card<'a, IOM, BS> {
+impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Card<'_, IOM, BS> {
         Card { note }
     }

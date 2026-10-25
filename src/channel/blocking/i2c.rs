@@ -4,7 +4,7 @@ use defmt::{error, trace};
 use embassy_time::{Duration, Instant};
 use embedded_hal::{delay::DelayNs, i2c::{self, Operation}};
 
-use crate::{NotecardConfig, channel::{ChannelBlocking, Error}};
+use crate::{NotecardConfig, channel::{Error, blocking::Channel}};
 
 struct DataQueryResult {
     available_to_send: usize,
@@ -167,7 +167,7 @@ where
     }
 }
 
-impl<T, D> ChannelBlocking for I2cChannel<T, D>
+impl<T, D> Channel for I2cChannel<T, D>
 where
     T: i2c::I2c,
     D: DelayNs,

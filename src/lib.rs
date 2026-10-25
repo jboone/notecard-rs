@@ -12,7 +12,7 @@ use embedded_hal_async::delay::DelayNs;
 use heapless::{CapacityError, String, Vec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::channel::ChannelAsync;
+use crate::channel::asynch::Channel;
 
 pub mod card;
 pub mod channel;
@@ -162,7 +162,7 @@ impl From<NotecardError> for NoteError {
 
 /// The driver for the Notecard. Must be intialized before making any requests.
 pub struct Notecard<
-    IOM: ChannelAsync,
+    IOM: Channel,
     const BUF_SIZE: usize = DEFAULT_BUF_SIZE,
 > {
     channel: IOM,
@@ -180,7 +180,7 @@ pub struct SuspendState<const BUF_SIZE: usize> {
     response_timeout: u32,
 }
 
-impl<IOM: ChannelAsync, const BUF_SIZE: usize>
+impl<IOM: Channel, const BUF_SIZE: usize>
     Notecard<IOM, BUF_SIZE>
 {
     pub fn new(channel: IOM) -> Notecard<IOM, BUF_SIZE> {
@@ -503,7 +503,7 @@ impl<IOM: ChannelAsync, const BUF_SIZE: usize>
 pub struct FutureResponse<
     'a,
     T: DeserializeOwned,
-    IOM: ChannelAsync,
+    IOM: Channel,
     const BUF_SIZE: usize,
 > {
     note: &'a mut Notecard<IOM, BUF_SIZE>,
@@ -513,7 +513,7 @@ pub struct FutureResponse<
 impl<
         'a,
         T: DeserializeOwned,
-        IOM: ChannelAsync,
+        IOM: Channel,
         const BUF_SIZE: usize,
     > FutureResponse<'a, T, IOM, BUF_SIZE>
 {

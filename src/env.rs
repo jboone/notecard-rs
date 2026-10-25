@@ -1,15 +1,15 @@
 use embedded_hal_async::delay::DelayNs;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::ChannelAsync;
+use crate::channel::asynch::Channel;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct Env<'a, IOM: ChannelAsync, const BS: usize> {
+pub struct Env<'a, IOM: Channel, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: ChannelAsync, const BS: usize> Env<'a, IOM, BS> {
+impl<'a, IOM: Channel, const BS: usize> Env<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Env<'_, IOM, BS> {
         Env { note }
     }

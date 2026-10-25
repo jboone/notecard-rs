@@ -5,15 +5,15 @@ use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
 use serde::{Deserialize, Serialize};
 
-use crate::ChannelAsync;
+use crate::channel::asynch::Channel;
 
 use super::{str_string, FutureResponse, NoteError, Notecard};
 
-pub struct Web<'a, IOM: ChannelAsync, const BS: usize> {
+pub struct Web<'a, IOM: Channel, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: ChannelAsync, const BS: usize> Web<'a, IOM, BS> {
+impl<'a, IOM: Channel, const BS: usize> Web<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Web<'_, IOM, BS> {
         Web { note }
     }

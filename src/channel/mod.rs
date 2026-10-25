@@ -1,4 +1,5 @@
-pub mod i2c;
+pub mod asynch;
+pub mod blocking;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -19,12 +20,3 @@ impl core::fmt::Display for Error {
 }
 
 impl core::error::Error for Error {}
-
-pub trait ChannelBlocking: embedded_io::Read + embedded_io::ReadReady + embedded_io::Write {
-    fn ping(&mut self) -> bool;
-}
-
-#[allow(async_fn_in_trait)]
-pub trait ChannelAsync: embedded_io_async::Read + embedded_io_async::ReadReady + embedded_io_async::Write {
-    async fn ping(&mut self) -> bool;
-}

@@ -754,27 +754,27 @@ mod tests {
     fn test_dfu_req() {
         // Test basic request
         let req = req::DFU::new(None, None, None);
-        let res: heapless::String<1024> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"card.dfu"}"#);
 
         // Test name & on request
         let req = req::DFU::new(Some(req::DFUName::Esp32), Some(true), None);
-        let res: heapless::String<256> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"card.dfu","name":"esp32","on":true}"#);
 
         // Test off request
         let req = req::DFU::new(None, Some(false), None);
-        let res: heapless::String<256> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"card.dfu","off":true}"#);
 
         // Test stop request
         let req = req::DFU::new(None, None, Some(true));
-        let res: heapless::String<256> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"card.dfu","stop":true}"#);
 
         // Test start request
         let req = req::DFU::new(None, None, Some(false));
-        let res: heapless::String<256> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"card.dfu","start":true}"#);
     }
 

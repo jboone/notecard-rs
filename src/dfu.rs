@@ -218,9 +218,9 @@ mod tests {
 
     #[test]
     fn test_status_name() {
-        let res: heapless::String<32> = serde_json_core::to_string(&req::StatusName::Card).unwrap();
+        let res = serde_json_core::to_string(&req::StatusName::Card).unwrap();
         assert_eq!(res, r#""card""#);
-        let res: heapless::String<32> = serde_json_core::to_string(&req::StatusName::User).unwrap();
+        let res = serde_json_core::to_string(&req::StatusName::User).unwrap();
         assert_eq!(res, r#""user""#);
     }
 
@@ -228,7 +228,7 @@ mod tests {
     fn test_status_req() {
         // Test basic request
         let req = req::Status::new(None, None, None, None, None, None, None);
-        let res: heapless::String<256> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"dfu.status"}"#);
 
         // Test a bunch of fields set
@@ -245,7 +245,7 @@ mod tests {
             built: Some("Some Sunny Day In December"),
             builder: Some("The Compnay"),
         };
-        let ver_str: heapless::String<512> = serde_json_core::to_string(&ver).unwrap();
+        let ver_str = serde_json_core::to_string(&ver).unwrap();
         let req = req::Status::new(
             Some(req::StatusName::User),
             Some(true),
@@ -255,7 +255,7 @@ mod tests {
             Some(true),
             Some("test error"),
         );
-        let res: heapless::String<512> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(
             res,
             r#"{"req":"dfu.status","name":"user","stop":true,"status":"test status","version":"{\"org\":\"Organization\",\"product\":\"Product\",\"description\":\"Firmware Description\",\"firmware\":\"Firmware Name\",\"version\":\"Firmware Version 1.0.0\",\"ver_major\":1,\"ver_minor\":0,\"ver_patch\":0,\"ver_build\":12345,\"built\":\"Some Sunny Day In December\",\"builder\":\"The Compnay\"}","vvalue":"usb:1;high:1;normal:1;low:0;dead:0","on":true,"err":"test error"}"#
@@ -263,7 +263,7 @@ mod tests {
 
         // Test off set
         let req = req::Status::new(None, None, None, None, None, Some(false), None);
-        let res: heapless::String<256> = serde_json_core::to_string(&req).unwrap();
+        let res = serde_json_core::to_string(&req).unwrap();
         assert_eq!(res, r#"{"req":"dfu.status","off":true}"#);
     }
 

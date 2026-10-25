@@ -2,7 +2,7 @@
 
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
-use embedded_hal::delay::DelayNs;
+use embedded_hal_async::delay::DelayNs;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::ChannelBlocking;
@@ -32,7 +32,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
     ///
     /// If you don't use a template the size of the payload is maximum 250 bytes, with a template 8KB
     /// seems to work.
-    pub fn add<T: Serialize + Default>(
+    pub async fn add<T: Serialize + Default>(
         self,
         delay: &mut impl DelayNs,
         file: Option<&str>,
@@ -52,12 +52,12 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
                 sync: Some(sync),
                 ..<req::Add<T> as Default>::default()
             },
-        )?;
+        ).await?;
         Ok(FutureResponse::from(self.note))
     }
 
     /// Updates a Note in a DB Notefile by its ID, replacing the existing body and/or payload.
-    pub fn update<T: Serialize + Default>(
+    pub async fn update<T: Serialize + Default>(
         self,
         delay: &mut impl DelayNs,
         file: &str,
@@ -76,7 +76,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
                 payload,
                 verify,
             },
-        )?;
+        ).await?;
         Ok(FutureResponse::from(self.note))
     }
 
@@ -86,7 +86,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
     /// * When sending this request to Notehub, the file must be a DB Notefile (.db).
     ///
     /// .qo/.qos Notes must be read from the Notehub event table using the Notehub Event API.
-    pub fn get<T: DeserializeOwned + Serialize>(
+    pub async fn get<T: DeserializeOwned + Serialize>(
         self,
         delay: &mut impl DelayNs,
         file: &str,
@@ -103,12 +103,12 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
                 delete,
                 deleted,
             },
-        )?;
+        ).await?;
         Ok(FutureResponse::from(self.note))
     }
 
     /// Deletes Notefiles from a DB Notefile by its Note ID. To delete Notes from a .qi Notefile, use note.get or note.changes with delete:true.
-    pub fn delete(
+    pub async fn delete(
         self,
         delay: &mut impl DelayNs,
         file: &str,
@@ -122,7 +122,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
                 note: heapless::String::try_from(note).map_err(NoteError::string_err)?,
                 verify: false,
             },
-        )?;
+        ).await?;
 
         Ok(FutureResponse::from(self.note))
     }
@@ -137,7 +137,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
     /// See
     /// https://dev.blues.io/notecard/notecard-walkthrough/low-bandwidth-design/#understanding-template-data-types
     /// for the format and values of the template.
-    pub fn template<T: Serialize + Default>(
+    pub async fn template<T: Serialize + Default>(
         self,
         delay: &mut impl DelayNs,
         file: Option<&str>,
@@ -167,7 +167,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
                 port,
                 delete,
             },
-        )?;
+        ).await?;
         Ok(FutureResponse::from(self.note))
     }
 }

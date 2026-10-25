@@ -2,7 +2,7 @@
 
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
-use embedded_hal::delay::DelayNs;
+use embedded_hal_async::delay::DelayNs;
 use serde::{Deserialize, Serialize};
 
 use crate::ChannelBlocking;
@@ -21,7 +21,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> DFU<'a, IOM, BS> {
     /// Retrieves downloaded firmware data from the Notecard.
     /// Note: this request is functional only when the Notecard has been set to
     /// dfu mode with a `hub.set`, `mode:dfu` request.
-    pub fn get<const PS: usize>(
+    pub async fn get<const PS: usize>(
         self,
         delay: &mut impl DelayNs,
         length: usize,
@@ -34,14 +34,14 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> DFU<'a, IOM, BS> {
                 length,
                 offset,
             },
-        )?;
+        ).await?;
 
         Ok(FutureResponse::from(self.note))
     }
 
     /// Gets and sets the background download status of MCU host or Notecard
     /// firmware updates.
-    pub fn status(
+    pub async fn status(
         self,
         delay: &mut impl DelayNs,
         name: Option<req::StatusName>,
@@ -55,7 +55,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> DFU<'a, IOM, BS> {
         self.note.request(
             delay,
             req::Status::new(name, stop, status, version, vvalue, on, err),
-        )?;
+        ).await?;
 
         Ok(FutureResponse::from(self.note))
     }

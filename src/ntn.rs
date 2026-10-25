@@ -5,11 +5,11 @@ use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
 use serde::{Deserialize, Serialize};
 
-use crate::ChannelBlocking;
+use crate::ChannelAsync;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct NTN<'a, IOM: ChannelBlocking, const BS: usize> {
+pub struct NTN<'a, IOM: ChannelAsync, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
@@ -22,7 +22,7 @@ pub enum NtnSetGps {
     Starnote,
 }
 
-impl<'a, IOM: ChannelBlocking, const BS: usize> NTN<'a, IOM, BS> {
+impl<'a, IOM: ChannelAsync, const BS: usize> NTN<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> NTN<'_, IOM, BS> {
         NTN { note }
     }

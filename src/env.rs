@@ -1,20 +1,20 @@
-use embedded_hal::delay::DelayNs;
+use embedded_hal_async::delay::DelayNs;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::ChannelBlocking;
+use crate::ChannelAsync;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct Env<'a, IOM: ChannelBlocking, const BS: usize> {
+pub struct Env<'a, IOM: ChannelAsync, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: ChannelBlocking, const BS: usize> Env<'a, IOM, BS> {
+impl<'a, IOM: ChannelAsync, const BS: usize> Env<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Env<'_, IOM, BS> {
         Env { note }
     }
 
-    pub fn get<T: DeserializeOwned>(
+    pub async fn get<T: DeserializeOwned>(
         self,
         delay: &mut impl DelayNs,
     ) -> Result<FutureResponse<'a, res::Get<T>, IOM, BS>, NoteError> {
@@ -25,7 +25,7 @@ impl<'a, IOM: ChannelBlocking, const BS: usize> Env<'a, IOM, BS> {
                 name: None,
                 time: None,
             },
-        )?;
+        ).await?;
 
         Ok(FutureResponse::from(self.note))
     }

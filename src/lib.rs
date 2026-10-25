@@ -9,10 +9,10 @@ use core::marker::PhantomData;
 use defmt::{debug, error, info, trace, warn};
 
 use embedded_hal_async::delay::DelayNs;
-use heapless::{String, Vec};
+use heapless::{CapacityError, String, Vec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::channel::ChannelBlocking;
+use crate::channel::ChannelAsync;
 
 pub mod card;
 pub mod channel;
@@ -162,7 +162,7 @@ impl From<NotecardError> for NoteError {
 
 /// The driver for the Notecard. Must be intialized before making any requests.
 pub struct Notecard<
-    IOM: ChannelBlocking,
+    IOM: ChannelAsync,
     const BUF_SIZE: usize = DEFAULT_BUF_SIZE,
 > {
     channel: IOM,
@@ -180,7 +180,7 @@ pub struct SuspendState<const BUF_SIZE: usize> {
     response_timeout: u32,
 }
 
-impl<IOM: ChannelBlocking, const BUF_SIZE: usize>
+impl<IOM: ChannelAsync, const BUF_SIZE: usize>
     Notecard<IOM, BUF_SIZE>
 {
     pub fn new(channel: IOM) -> Notecard<IOM, BUF_SIZE> {
@@ -204,13 +204,10 @@ impl<IOM: ChannelBlocking, const BUF_SIZE: usize>
             Err(NoteError::BufOverflow)
         } else {
             Ok(Notecard {
+                channel: self.channel,
                 buf: Vec::<_, B>::from_slice(&self.buf).unwrap(),
-                i2c: self.i2c,
-                addr: self.addr,
                 state: self.state,
                 response_timeout: self.response_timeout,
-                chunk_delay: self.chunk_delay,
-                segment_delay: self.segment_delay,
             })
         }
     }
@@ -256,7 +253,7 @@ impl<IOM: ChannelBlocking, const BUF_SIZE: usize>
     pub async fn data_query(&mut self) -> Result<bool, NoteError> {
         trace!("note: data_query: {:?}", self.state);
         if !matches!(self.state, NoteState::Response) {
-            let read_ready = self.channel.read_ready().await.map_err(|_| NoteError::I2cReadError)?;
+            let read_ready = self.channel.read_ready().map_err(|_| NoteError::I2cReadError)?;
 
             if read_ready {
                 self.buf.clear();
@@ -276,7 +273,7 @@ impl<IOM: ChannelBlocking, const BUF_SIZE: usize>
     async fn read(&mut self) -> Result<bool, NoteError> {
         if let NoteState::Response = self.state {
             let mut bytes = [0_u8; 256];
-            let bytes_read = self.channel.read(&mut bytes).map_err(|_| NoteError::I2cReadError)?;
+            let bytes_read = self.channel.read(&mut bytes).await.map_err(|_| NoteError::I2cReadError)?;
             self.buf.extend_from_slice(&bytes[..bytes_read]).unwrap(); // XXX: check enough space
 
             let read_ready = self.channel.read_ready().map_err(|_| NoteError::I2cReadError)?;
@@ -506,7 +503,7 @@ impl<IOM: ChannelBlocking, const BUF_SIZE: usize>
 pub struct FutureResponse<
     'a,
     T: DeserializeOwned,
-    IOM: ChannelBlocking,
+    IOM: ChannelAsync,
     const BUF_SIZE: usize,
 > {
     note: &'a mut Notecard<IOM, BUF_SIZE>,
@@ -516,7 +513,7 @@ pub struct FutureResponse<
 impl<
         'a,
         T: DeserializeOwned,
-        IOM: ChannelBlocking,
+        IOM: ChannelAsync,
         const BUF_SIZE: usize,
     > FutureResponse<'a, T, IOM, BUF_SIZE>
 {

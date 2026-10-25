@@ -5,7 +5,7 @@ use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::ChannelBlocking;
+use crate::ChannelAsync;
 
 use super::{str_string, FutureResponse, NoteError, Notecard};
 
@@ -16,11 +16,11 @@ pub enum TemplateFormat {
     Compact,
 }
 
-pub struct Note<'a, IOM: ChannelBlocking, const BS: usize> {
+pub struct Note<'a, IOM: ChannelAsync, const BS: usize> {
     note: &'a mut Notecard<IOM, BS>,
 }
 
-impl<'a, IOM: ChannelBlocking, const BS: usize> Note<'a, IOM, BS> {
+impl<'a, IOM: ChannelAsync, const BS: usize> Note<'a, IOM, BS> {
     pub fn from(note: &mut Notecard<IOM, BS>) -> Note<'_, IOM, BS> {
         Note { note }
     }

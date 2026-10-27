@@ -8,6 +8,7 @@ use core::marker::PhantomData;
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
 
+use embassy_time::{Duration, Instant, Timer};
 use embedded_hal_async::delay::DelayNs;
 use heapless::{CapacityError, String, Vec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -269,21 +270,42 @@ impl<IOM: Channel, const BUF_SIZE: usize>
         }
     }
 
-    /// Read until empty.
-    async fn read(&mut self) -> Result<bool, NoteError> {
+    /// Read a response, expecting continuous data until the response concludes.
+    /// The timeout determines how long we will wait between chunks of data before
+    /// deciding the response is finished.
+    ///
+    /// This is not as ideal as taking advantage of UART features to detect idle state
+    /// or zero-bytes.
+    async fn read_response(&mut self) -> Result<(), NoteError> {
         if let NoteState::Response = self.state {
-            let mut bytes = [0_u8; 256];
-            let bytes_read = self.channel.read(&mut bytes).await.map_err(|_| NoteError::I2cReadError)?;
-            self.buf.extend_from_slice(&bytes[..bytes_read]).unwrap(); // XXX: check enough space
+            let mut buffer = [0_u8; 256];
 
-            let read_ready = self.channel.read_ready().map_err(|_| NoteError::I2cReadError)?;
-            if read_ready {
-                self.state = NoteState::Response;
-            } else {
-                self.state = NoteState::ResponseReady;
+            const POLL_INTERVAL: Duration = Duration::from_millis(1);
+            let timeout_interval = POLL_INTERVAL * 10;
+
+            let mut timeout = Instant::now() + timeout_interval;
+
+            while Instant::now() < timeout {
+                while let Ok(true) = self.channel.read_ready() {
+                    match self.channel.read(&mut buffer).await {
+                        Ok(count) => {
+                            let bytes_read = &buffer[..count];
+                            trace!("notecard: read {:a}", bytes_read);
+                            self.buf.extend_from_slice(bytes_read).unwrap();
+                            timeout = Instant::now() + timeout_interval;
+                        },
+                        Err(e) => {
+                            trace!("notecard: read error {}", e);
+                        },
+                    }
+                }
+
+                Timer::after(POLL_INTERVAL).await;
             }
 
-            Ok(read_ready)
+            self.state = NoteState::ResponseReady;
+
+            Ok(())
         } else {
             error!("read: called when not waiting for response");
             Err(NoteError::WrongState)
@@ -326,13 +348,7 @@ impl<IOM: Channel, const BUF_SIZE: usize>
                     }
                 }
                 NoteState::Response => {
-                    let read_ready = self.read().await?;
-                    if !read_ready {
-                        continue;
-                    } else {
-                        // sleep and wait for more data.
-                        break Ok(None)
-                    }
+                    self.read_response().await?;
                 }
                 NoteState::ResponseReady => {
                     debug!("response read, deserializing.");

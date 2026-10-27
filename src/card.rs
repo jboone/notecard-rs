@@ -189,6 +189,41 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
         Ok(FutureResponse::from(self.note))
     }
 
+    pub async fn binary(
+        self,
+        delay: &mut impl DelayNs,
+        delete: bool,
+    ) -> Result<FutureResponse<'a, res::Binary, IOM, BS>, NoteError> {
+        let request: &[u8] = if delete {
+            br#"{"req":"card.binary","delete":true}\n"#
+        } else {
+            br#"{"req":"card.binary"}\n"#
+        };
+        self.note
+            .request_raw(delay, request).await?;
+        Ok(FutureResponse::from(self.note))
+    }
+
+    pub async fn binary_put(
+        self,
+        delay: &mut impl DelayNs,
+        cobs: Option<u32>,
+        offset: Option<u32>,
+        status: Option<&str>,
+    ) -> Result<FutureResponse<'a, res::BinaryPut, IOM, BS>, NoteError> {
+        self.note.request(
+            delay,
+            req::BinaryPut {
+                req: "card.binary.put",
+                cobs,
+                offset,
+                status: str_string(status)?,
+            },
+        ).await?;
+
+        Ok(FutureResponse::from(self.note))
+    }
+
     /// Returns firmware version information for the Notecard.
     pub async fn version(
         self,
@@ -419,6 +454,20 @@ pub mod req {
         pub minutes: Option<u32>,
     }
 
+    #[derive(Deserialize, Serialize, Debug, defmt::Format, Default)]
+    pub struct BinaryPut {
+        pub req: &'static str,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub cobs: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub offset: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub status: Option<heapless::String<32>>,
+    }
+
     #[derive(Deserialize, Serialize, Debug, defmt::Format, PartialEq)]
     #[serde(rename_all = "lowercase")]
     pub enum DFUName {
@@ -584,6 +633,19 @@ pub mod res {
         pub mode: Option<heapless::String<24>>,
         pub count: Option<u8>,
         pub net: Option<WirelessNet>,
+    }
+
+    #[derive(Deserialize, Debug, defmt::Format)]
+    pub struct Binary {
+        pub cobs: Option<u32>,
+        pub connected: Option<bool>,
+        pub length: Option<u32>,
+        pub max: u32,
+        pub status: Option<heapless::String<32>>,
+    }
+
+    #[derive(Deserialize, Debug, defmt::Format)]
+    pub struct BinaryPut {
     }
 
     #[derive(Deserialize, Debug, defmt::Format)]

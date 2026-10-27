@@ -375,6 +375,12 @@ impl<IOM: Channel, const BUF_SIZE: usize>
         warn!("resetting: consuming any left-over response and perform a new handshake.");
 
         self.buf.clear(); // clear in case data_query() is 0.
+
+        let ready = self.channel.reset().await.map_err(|_| NoteError::I2cWriteError)?;
+        if !ready {
+            return Err(NoteError::WrongState);
+        }
+
         self.state = NoteState::Handshake;
         self.handshake(delay).await
     }

@@ -265,6 +265,35 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
         ).await?;
         Ok(FutureResponse::from(self.note))
     }
+
+    /// Configure various uses of the AUXTX and AUXRX pins on the Notecard's edge connector.
+    /// https://dev.blues.io/api-reference/notecard-api/card-requests/latest/#card-aux-serial
+    pub async fn aux_serial(
+        self,
+        delay: &mut impl DelayNs,
+        duration: Option<u32>,
+        limit: Option<bool>,
+        max: Option<i32>,
+        minutes: Option<u32>,
+        mode: Option<&str>,
+        ms: Option<i32>,
+        rate: Option<i32>,
+    ) -> Result<FutureResponse<'a, res::AuxSerial, IOM, BS>, NoteError> {
+        self.note.request(
+            delay,
+            req::AuxSerial {
+                req: "card.aux.serial",
+                duration,
+                limit,
+                max,
+                minutes,
+                mode: str_string(mode)?,
+                ms,
+                rate,
+            },
+        ).await?;
+        Ok(FutureResponse::from(self.note))
+    }
 }
 
 pub mod req {
@@ -276,6 +305,32 @@ pub mod req {
         pub req: &'static str,
         pub mode: &'static str,
         pub usage: [&'static str; 4],
+    }
+
+    #[derive(Deserialize, Serialize, Debug, defmt::Format, Default)]
+    pub struct AuxSerial {
+        pub req: &'static str,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub duration: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub limit: Option<bool>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub max: Option<i32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub minutes: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub mode: Option<heapless::String<32>>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub ms: Option<i32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub rate: Option<i32>,
     }
 
     #[derive(Deserialize, Serialize, Debug, defmt::Format, Default)]
@@ -438,6 +493,14 @@ pub mod res {
         pub seconds: Option<u32>,
         pub time: Option<u32>,
         pub state: Option<[GpioState; 4]>,
+    }
+
+    #[derive(Deserialize, Debug, defmt::Format)]
+    pub struct AuxSerial {
+        pub max: Option<u32>,
+        pub mode: Option<heapless::String<32>>,
+        pub ms: Option<u32>,
+        pub rate: Option<u32>,
     }
 
     #[derive(Deserialize, Debug, defmt::Format)]

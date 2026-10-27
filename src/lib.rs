@@ -388,8 +388,6 @@ impl<IOM: Channel, const BUF_SIZE: usize>
     /// and time-out. However, you won't be able to get a mutable reference without having
     /// dropped the `FutureResponse`.
     pub async fn reset(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
-        warn!("resetting: consuming any left-over response and perform a new handshake.");
-
         self.buf.clear(); // clear in case data_query() is 0.
 
         let ready = self.channel.reset().await.map_err(|_| NoteError::I2cWriteError)?;

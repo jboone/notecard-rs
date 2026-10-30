@@ -1,3 +1,4 @@
+use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
 use embedded_io_async::{ErrorType, Read, ReadReady, Write};
 
@@ -71,24 +72,58 @@ where
     U: Read + ReadReady,
     D: DelayNs,
 {
-    async fn ping(&mut self) -> bool {
-        // There isn't really a "ping" function over UART, that I'm aware of.
+    async fn ping(&mut self) -> Result<bool, Self::Error> {
+        let mut buffer = [0_u8; 256];
 
-        // self.uart_tx.write_all(b"\n").await.unwrap();
-        // self.uart_tx.flush().await.unwrap();
+        trace!("notecard: sending single LF");
+        self.write_all(b"\n").await.map_err(|_| Error::Write)?;
 
-        // let mut buffer = [0_u8; 256];
-        // while let Ok(true) = self.uart_rx.read_ready() {
-        //     match self.uart_rx.read(&mut buffer).await {
-        //         Ok(count) => {
-        //             let bytes = &buffer[..count];
-        //         },
-        //         Err(e) => {
+        trace!("notecard: waiting for handshake");
+        let mut waited = 0;
+        let mut something_found = false;
+        let mut non_control_char_found = false;
 
-        //         },
-        //     }
-        // }
-        true
+        while waited < CARD_RESET_DRAIN_MS {
+            while let Ok(true) = self.read_ready() {
+                match self.read(&mut buffer).await {
+                    Ok(count) => {
+                        let read = &buffer[..count];
+                        trace!("notecard: read {:a}", read);
+                        something_found = true;
+                        for &c in read {
+                            match c {
+                                b'\n' | b'\r' => {
+                                    trace!("notecard: found CR or LF");
+                                },
+                                _ => {
+                                    non_control_char_found = true;
+                                    waited = 0;
+                                },
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        trace!("notecard: read error");
+                    },
+                }
+            }
+
+            self.delay.delay_ms(1).await;
+            waited += 1;
+        }
+
+        if something_found && !non_control_char_found {
+            trace!("notecard: ready");
+            return Ok(true);
+        }
+
+        if something_found {
+            error!("unrecognized data from notecard");
+        } else {
+            error!("notecard not responding");
+        }
+
+        Ok(false)
     }
 
     async fn reset(&mut self) -> Result<bool, Self::Error> {

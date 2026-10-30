@@ -251,8 +251,8 @@ impl<IOM: Channel, D: DelayNs, const BUF_SIZE: usize>
     /// Check if notecarrier is connected and responding.
     ///
     /// > This is allowed no matter the state.
-    pub async fn ping(&mut self) -> bool {
-        self.channel.ping().await
+    pub async fn ping(&mut self) -> Result<bool, NoteError> {
+        self.channel.ping().await.map_err(|_| NoteError::WrongState)
     }
 
     /// Query the notecard for available bytes.

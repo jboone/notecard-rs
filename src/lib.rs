@@ -297,7 +297,12 @@ impl<IOM: Channel, D: DelayNs, const BUF_SIZE: usize>
                             let bytes_read = &buffer[..count];
                             trace!("notecard: read {:a}", bytes_read);
                             self.buf.extend_from_slice(bytes_read).unwrap();
-                            waited = 0;
+                            if let Some(&b'\n') = bytes_read.last() {
+                                trace!("notecard: last character was LF, exiting");
+                                break 'timeout_loop;
+                            } else {
+                                waited = 0;
+                            }
                         },
                         Err(e) => {
                             trace!("notecard: read error {}", e);

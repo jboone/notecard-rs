@@ -127,7 +127,19 @@ where
     }
 
     async fn reset(&mut self) -> Result<bool, Self::Error> {
-        // TODO: Just implement a `flush()`?
-        Ok(true)
+        for _ in 0..10 {
+            if self.ping().await? {
+                return Ok(true);
+            }
+
+            self.delay.delay_ms(CARD_RESET_DRAIN_MS).await;
+
+            // TODO: "Reset" serial port.
+            warn!("TODO: reset serial port");
+
+            debug!("retrying Serial interface reset.")
+        }
+
+        Ok(false)
     }
 }

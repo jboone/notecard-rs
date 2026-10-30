@@ -1,8 +1,10 @@
+use core::fmt::Write as _;
+
 use defmt::{debug, error, info, trace, warn};
 use embedded_hal_async::delay::DelayNs;
 use embedded_io_async::{ErrorType, Read, ReadReady, Write};
 
-use crate::channel::Error;
+use crate::channel::{BaudRate, Error};
 use super::Channel;
 
 pub struct UartChannel<T, U, D> {
@@ -141,5 +143,55 @@ where
         }
 
         Ok(false)
+    }
+}
+
+impl<T, U, D> BaudRate for UartChannel<T, U, D>
+where
+    T: Write + BaudRate,
+    U: Read + ReadReady + BaudRate,
+{
+    fn set_baudrate(&mut self, rate: u32) -> Result<(), Error> {
+        self.uart_tx.set_baudrate(rate)?;
+        self.uart_rx.set_baudrate(rate)?;
+        Ok(())
+    }
+}
+
+impl<T, U, D> super::BaudRateNegotiate for UartChannel<T, U, D>
+where
+    T: Write + BaudRate,
+    U: Read + ReadReady + BaudRate,
+    D: DelayNs,
+{
+    /// Function assumes UART is already configured for preferred rate.
+    async fn negotiate_baudrate(&mut self, default_rate: u32, preferred_rate: u32) -> Result<(), Error> {
+        info!("notecard: AUX serial: initializing interface");
+
+        if !self.reset().await? {
+            warn!("notecard: AUX serial: failed at preferred rate");
+            self.set_baudrate(default_rate).unwrap();
+
+            if !self.reset().await? {
+                error!("notecard: AUX serial: failed at default rate");
+                return Err(Error::Handshake)
+            } else {
+                warn!("notecard: AUX serial: communicating at default rate, attempting upgrade to preferred rate");
+                let mut request = heapless::Vec::<u8, 128>::new();
+                request.write_fmt(format_args!("{{\"req\":\"card.aux.serial\",\"rate\":{}}}\n", preferred_rate)).unwrap();
+                self.write_all(&request).await.map_err(|_| Error::Write)?;
+
+                self.set_baudrate(preferred_rate).unwrap();
+
+                if !self.reset().await? {
+                    error!("notecard: AUX serial: failed to shift from default to preferred rate");
+                return Err(Error::Handshake)
+                }
+            }
+        } else {
+            info!("notecard: AUX serial: communicating at preferred rate");
+        }
+
+        Ok(())
     }
 }

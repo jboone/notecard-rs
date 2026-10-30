@@ -162,8 +162,10 @@ impl Error for ChannelError {
         match *self {
             ChannelError::Read => ErrorKind::ConnectionAborted,
             ChannelError::Write => ErrorKind::ConnectionAborted,
+            ChannelError::BaudRate => ErrorKind::Unsupported,
             ChannelError::InvalidResponse => ErrorKind::InvalidData,
             ChannelError::InvalidArgument => ErrorKind::InvalidInput,
+            ChannelError::Handshake => ErrorKind::ConnectionReset,
             ChannelError::Timeout => ErrorKind::TimedOut,
         }
     }

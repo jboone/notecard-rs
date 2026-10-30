@@ -5,7 +5,6 @@
 
 use core::marker::PhantomData;
 
-#[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
 
 use embedded_hal_async::delay::DelayNs;
@@ -304,8 +303,8 @@ impl<IOM: Channel, D: DelayNs, const BUF_SIZE: usize>
                                 waited = 0;
                             }
                         },
-                        Err(e) => {
-                            trace!("notecard: read error {}", e);
+                        Err(_) => {
+                            trace!("notecard: read error");
                         },
                     }
                 }

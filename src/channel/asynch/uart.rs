@@ -38,7 +38,7 @@ where
 {
     async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         let count = self.uart_rx.read(buf).await.map_err(|_| Error::Read)?;
-        trace!("uart: read \"{:a}\"", &buf[..count]);
+        trace!("uart: read {:a}", &buf[..count]);
         Ok(count)
     }
 }
@@ -57,7 +57,7 @@ where
     T: Write
 {
     async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        trace!("uart: write \"{:a}\"", buf);
+        trace!("uart: write {:a}", buf);
         self.uart_tx.write(buf).await.map_err(|_| Error::Write)
     }
 

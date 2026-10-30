@@ -444,6 +444,7 @@ impl<IOM: Channel, D: DelayNs, const BUF_SIZE: usize>
         });
 
         self.channel.write_all(&self.buf).await.map_err(|_| NoteError::I2cWriteError)?;
+        self.channel.flush().await.map_err(|_| NoteError::I2cWriteError)?;
 
         self.state = NoteState::Poll(0);
 

@@ -9,25 +9,23 @@ use crate::channel::asynch::Channel;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct Hub<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct Hub<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
-impl<'a, IOM: Channel, const BS: usize> Hub<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> Hub<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> Hub<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> Hub<'_, IOM, D, BS> {
         Hub { note }
     }
 
     /// Add a "device health" log message to send to Notehub on the next sync.
     pub async fn log(
         self,
-        delay: &mut impl DelayNs,
         text: &str,
         alert: bool,
         sync: bool,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::HubLog {
                 req: "hub.log",
                 text,
@@ -42,9 +40,8 @@ impl<'a, IOM: Channel, const BS: usize> Hub<'a, IOM, BS> {
     /// retrieves the current Notehub configuration for the Natecard.
     pub async fn get(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Hub, IOM, BS>, NoteError> {
-        self.note.request_raw(delay, b"{\"req\":\"hub.get\"}\n").await?;
+    ) -> Result<FutureResponse<'a, res::Hub, IOM, D, BS>, NoteError> {
+        self.note.request_raw(b"{\"req\":\"hub.get\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
@@ -52,7 +49,6 @@ impl<'a, IOM: Channel, const BS: usize> Hub<'a, IOM, BS> {
     /// the primary method for controlling the Notecard's Notehub connection and sync behavior.
     pub async fn set(
         self,
-        delay: &mut impl DelayNs,
         product: Option<&str>,
         host: Option<&str>,
         mode: Option<req::HubMode>,
@@ -64,9 +60,8 @@ impl<'a, IOM: Channel, const BS: usize> Hub<'a, IOM, BS> {
         vinbound: Option<&str>,
         align: Option<bool>,
         sync: Option<bool>,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::HubSet {
                 req: "hub.set",
                 product,
@@ -89,13 +84,11 @@ impl<'a, IOM: Channel, const BS: usize> Hub<'a, IOM, BS> {
     /// remove the notecard from any penalty boxes.
     pub async fn sync(
         self,
-        delay: &mut impl DelayNs,
         allow: bool,
         out: Option<bool>,
         inn: Option<bool>,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::HubSync {
                 req: "hub.sync",
                 allow: if allow { Some(true) } else { None },
@@ -110,10 +103,9 @@ impl<'a, IOM: Channel, const BS: usize> Hub<'a, IOM, BS> {
     /// Check on the status of a recently triggered or previous sync.
     pub async fn sync_status(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::SyncStatus, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::SyncStatus, IOM, D, BS>, NoteError> {
         self.note
-            .request_raw(delay, b"{\"req\":\"hub.sync.status\"}\n").await?;
+            .request_raw(b"{\"req\":\"hub.sync.status\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 }

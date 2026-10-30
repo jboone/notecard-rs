@@ -1,32 +1,35 @@
-use defmt::trace;
+use embedded_hal_async::delay::DelayNs;
 use embedded_io_async::{ErrorType, Read, ReadReady, Write};
 
 use crate::channel::Error;
 use super::Channel;
 
-pub struct UartChannel<T, U> {
+pub struct UartChannel<T, U, D> {
     uart_tx: T,
     uart_rx: U,
+    delay: D,
 }
 
-impl<T, U> UartChannel<T, U>
+impl<T, U, D> UartChannel<T, U, D>
 where
     T: Write,
     U: Read + ReadReady,
+    D: DelayNs,
 {
-    pub fn new_async(uart_tx: T, uart_rx: U) -> Self {
+    pub fn new_async(uart_tx: T, uart_rx: U, delay: D) -> Self {
         Self {
             uart_tx,
             uart_rx,
+            delay,
         }
     }
 }
 
-impl<T, U> ErrorType for UartChannel<T, U> {
+impl<T, U, D> ErrorType for UartChannel<T, U, D> {
     type Error = crate::channel::Error;
 }
 
-impl<T, U> Read for UartChannel<T, U>
+impl<T, U, D> Read for UartChannel<T, U, D>
 where
     U: Read
 {
@@ -37,7 +40,7 @@ where
     }
 }
 
-impl<T, U> ReadReady for UartChannel<T, U>
+impl<T, U, D> ReadReady for UartChannel<T, U, D>
 where
     U: ReadReady
 {
@@ -46,7 +49,7 @@ where
     }
 }
 
-impl<T, U> Write for UartChannel<T, U>
+impl<T, U, D> Write for UartChannel<T, U, D>
 where
     T: Write
 {
@@ -60,10 +63,13 @@ where
     }
 }
 
-impl<T, U> Channel for UartChannel<T, U>
+const CARD_RESET_DRAIN_MS: u32 = 500;
+
+impl<T, U, D> Channel for UartChannel<T, U, D>
 where
     T: Write,
     U: Read + ReadReady,
+    D: DelayNs,
 {
     async fn ping(&mut self) -> bool {
         // There isn't really a "ping" function over UART, that I'm aware of.

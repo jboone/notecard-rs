@@ -8,7 +8,6 @@ use core::marker::PhantomData;
 #[allow(unused_imports)]
 use defmt::{debug, error, info, trace, warn};
 
-use embassy_time::{Duration, Instant, Timer};
 use embedded_hal_async::delay::DelayNs;
 use heapless::{CapacityError, String, Vec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -164,6 +163,7 @@ impl From<NotecardError> for NoteError {
 /// The driver for the Notecard. Must be intialized before making any requests.
 pub struct Notecard<
     IOM: Channel,
+    D: DelayNs,
     const BUF_SIZE: usize = DEFAULT_BUF_SIZE,
 > {
     channel: IOM,
@@ -173,6 +173,8 @@ pub struct Notecard<
     buf: Vec<u8, BUF_SIZE>,
 
     response_timeout: u32,
+
+    delay: D,
 }
 
 pub struct SuspendState<const BUF_SIZE: usize> {
@@ -181,26 +183,27 @@ pub struct SuspendState<const BUF_SIZE: usize> {
     response_timeout: u32,
 }
 
-impl<IOM: Channel, const BUF_SIZE: usize>
-    Notecard<IOM, BUF_SIZE>
+impl<IOM: Channel, D: DelayNs, const BUF_SIZE: usize>
+    Notecard<IOM, D, BUF_SIZE>
 {
-    pub fn new(channel: IOM) -> Notecard<IOM, BUF_SIZE> {
-        Self::new_with_config(channel, NotecardConfig::default())
+    pub fn new(channel: IOM, delay: D) -> Notecard<IOM, D, BUF_SIZE> {
+        Self::new_with_config(channel, delay, NotecardConfig::default())
     }
 
-    pub fn new_with_config(channel: IOM, c: NotecardConfig) -> Notecard<IOM, BUF_SIZE> {
+    pub fn new_with_config(channel: IOM, delay: D, c: NotecardConfig) -> Notecard<IOM, D, BUF_SIZE> {
         Notecard {
             channel,
             state: NoteState::Handshake,
             buf: Vec::new(),
 
             response_timeout: c.response_timeout,
+            delay,
         }
     }
 
     /// Resize the internal buffer, consuming the existing, and returning a new Notecard
     /// instance.
-    pub fn resize_buf<const B: usize>(self) -> Result<Notecard<IOM, B>, NoteError> {
+    pub fn resize_buf<const B: usize>(self) -> Result<Notecard<IOM, D, B>, NoteError> {
         if B < self.buf.len() {
             Err(NoteError::BufOverflow)
         } else {
@@ -209,6 +212,7 @@ impl<IOM: Channel, const BUF_SIZE: usize>
                 buf: Vec::<_, B>::from_slice(&self.buf).unwrap(),
                 state: self.state,
                 response_timeout: self.response_timeout,
+                delay: self.delay,
             })
         }
     }
@@ -228,19 +232,20 @@ impl<IOM: Channel, const BUF_SIZE: usize>
     }
 
     /// Resume a previously [`suspend`]ed Notecard driver.
-    pub fn resume(channel: IOM, state: SuspendState<BUF_SIZE>) -> Notecard<IOM, BUF_SIZE> {
+    pub fn resume(channel: IOM, delay: D, state: SuspendState<BUF_SIZE>) -> Notecard<IOM, D, BUF_SIZE> {
         Notecard {
             channel,
             state: state.state,
             buf: state.buf,
             response_timeout: state.response_timeout,
+            delay,
         }
     }
 
     /// Initialize the notecard driver by performing handshake with notecard.
-    pub async fn initialize(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
+    pub async fn initialize(&mut self) -> Result<(), NoteError> {
         info!("note: initializing.");
-        self.reset(delay).await
+        self.reset().await
     }
 
     /// Check if notecarrier is connected and responding.
@@ -280,27 +285,25 @@ impl<IOM: Channel, const BUF_SIZE: usize>
         if let NoteState::Response = self.state {
             let mut buffer = [0_u8; 256];
 
-            const POLL_INTERVAL: Duration = Duration::from_millis(1);
-            let timeout_interval = POLL_INTERVAL * 10;
+            let mut waited = 0;
 
-            let mut timeout = Instant::now() + timeout_interval;
+            'timeout_loop: while waited < self.response_timeout {
+                self.delay.delay_ms(RESPONSE_DELAY).await;
+                waited += RESPONSE_DELAY;
 
-            while Instant::now() < timeout {
                 while let Ok(true) = self.channel.read_ready() {
                     match self.channel.read(&mut buffer).await {
                         Ok(count) => {
                             let bytes_read = &buffer[..count];
                             trace!("notecard: read {:a}", bytes_read);
                             self.buf.extend_from_slice(bytes_read).unwrap();
-                            timeout = Instant::now() + timeout_interval;
+                            waited = 0;
                         },
                         Err(e) => {
                             trace!("notecard: read error {}", e);
                         },
                     }
                 }
-
-                Timer::after(POLL_INTERVAL).await;
             }
 
             self.state = NoteState::ResponseReady;
@@ -364,7 +367,7 @@ impl<IOM: Channel, const BUF_SIZE: usize>
 
     /// Read any remaining data from the Notecarrier. This will cancel any waiting responses, and
     /// waiting for a response after this call will time-out.
-    async fn consume_response(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
+    async fn consume_response(&mut self) -> Result<(), NoteError> {
         warn!("note: trying to consume any left-over response.");
         let mut waited = 0;
 
@@ -374,7 +377,7 @@ impl<IOM: Channel, const BUF_SIZE: usize>
                 return Ok(());
             }
 
-            delay.delay_ms(RESPONSE_DELAY).await;
+            self.delay.delay_ms(RESPONSE_DELAY).await;
             waited += RESPONSE_DELAY;
         }
 
@@ -387,7 +390,7 @@ impl<IOM: Channel, const BUF_SIZE: usize>
     /// Reset notecard driver and state. Any waiting responses will be invalidated
     /// and time-out. However, you won't be able to get a mutable reference without having
     /// dropped the `FutureResponse`.
-    pub async fn reset(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
+    pub async fn reset(&mut self) -> Result<(), NoteError> {
         self.buf.clear(); // clear in case data_query() is 0.
 
         let ready = self.channel.reset().await.map_err(|_| NoteError::I2cWriteError)?;
@@ -396,15 +399,15 @@ impl<IOM: Channel, const BUF_SIZE: usize>
         }
 
         self.state = NoteState::Handshake;
-        self.handshake(delay).await
+        self.handshake().await
     }
 
-    async fn handshake(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
+    async fn handshake(&mut self) -> Result<(), NoteError> {
         if matches!(self.state, NoteState::Handshake) {
             debug!("note: handshake");
             if self.data_query().await? {
                 error!("note: handshake: remaining data in queue, consuming..");
-                self.consume_response(delay).await?;
+                self.consume_response().await?;
             }
 
             self.state = NoteState::Request;
@@ -413,12 +416,12 @@ impl<IOM: Channel, const BUF_SIZE: usize>
     }
 
     /// Sends request from buffer.
-    async fn send_request(&mut self, delay: &mut impl DelayNs) -> Result<(), NoteError> {
+    async fn send_request(&mut self) -> Result<(), NoteError> {
         if !matches!(self.state, NoteState::Request) {
             warn!("note: request: wrong-state, resetting before new request.");
             let buf = self.buf.clone();
 
-            self.reset(delay).await?; // this clears the buffer - and may use it for other stuff!
+            self.reset().await?; // this clears the buffer - and may use it for other stuff!
 
             self.buf.clear();
             self.buf
@@ -446,7 +449,6 @@ impl<IOM: Channel, const BUF_SIZE: usize>
     /// [FutureResponse] must be created and consumed.
     pub(crate) async fn request_raw(
         &mut self,
-        delay: &mut impl DelayNs,
         cmd: &[u8],
     ) -> Result<(), NoteError> {
         self.buf.clear();
@@ -456,7 +458,7 @@ impl<IOM: Channel, const BUF_SIZE: usize>
 
         self.buf.copy_from_slice(cmd);
 
-        self.send_request(delay).await
+        self.send_request().await
     }
 
     /// Make a request. After making a request a [FutureResponse] must be created and consumed
@@ -464,7 +466,6 @@ impl<IOM: Channel, const BUF_SIZE: usize>
     /// `[card]`.
     pub(crate) async fn request<T: Serialize>(
         &mut self,
-        delay: &mut impl DelayNs,
         cmd: T,
     ) -> Result<(), NoteError> {
         self.buf.clear();
@@ -475,40 +476,40 @@ impl<IOM: Channel, const BUF_SIZE: usize>
 
         // Add new-line, this separator tells the Notecard that the request is done.
         self.buf.push(b'\n').map_err(|_| NoteError::SerError)?;
-        self.send_request(delay).await
+        self.send_request().await
     }
 
     /// [card Requests](https://dev.blues.io/reference/notecard-api/card-requests/)
-    pub fn card(&mut self) -> card::Card<'_, IOM, BUF_SIZE> {
+    pub fn card(&mut self) -> card::Card<'_, IOM, D, BUF_SIZE> {
         card::Card::from(self)
     }
 
-    pub fn env(&mut self) -> env::Env<'_, IOM, BUF_SIZE> {
+    pub fn env(&mut self) -> env::Env<'_, IOM, D, BUF_SIZE> {
         env::Env::from(self)
     }
 
     /// [note Requests](https://dev.blues.io/reference/notecard-api/note-requests/)
-    pub fn note(&mut self) -> note::Note<'_, IOM, BUF_SIZE> {
+    pub fn note(&mut self) -> note::Note<'_, IOM, D, BUF_SIZE> {
         note::Note::from(self)
     }
 
     /// [web Requests](https://dev.blues.io/reference/notecard-api/web-requests/)
-    pub fn web(&mut self) -> web::Web<'_, IOM, BUF_SIZE> {
+    pub fn web(&mut self) -> web::Web<'_, IOM, D, BUF_SIZE> {
         web::Web::from(self)
     }
 
     /// [hub Requests](https://dev.blues.io/reference/notecard-api/hub-requests/)
-    pub fn hub(&mut self) -> hub::Hub<'_, IOM, BUF_SIZE> {
+    pub fn hub(&mut self) -> hub::Hub<'_, IOM, D, BUF_SIZE> {
         hub::Hub::from(self)
     }
 
     /// [dfu Requests](https://dev.blues.io/api-reference/notecard-api/dfu-requests/)
-    pub fn dfu(&mut self) -> dfu::DFU<'_, IOM, BUF_SIZE> {
+    pub fn dfu(&mut self) -> dfu::DFU<'_, IOM, D, BUF_SIZE> {
         dfu::DFU::from(self)
     }
 
     /// [NtN Requests](https://dev.blues.io/reference/notecard-api/ntn-requests/)
-    pub fn ntn(&mut self) -> ntn::NTN<'_, IOM, BUF_SIZE> {
+    pub fn ntn(&mut self) -> ntn::NTN<'_, IOM, D, BUF_SIZE> {
         ntn::NTN::from(self)
     }
 }
@@ -524,9 +525,10 @@ pub struct FutureResponse<
     'a,
     T: DeserializeOwned,
     IOM: Channel,
+    D: DelayNs,
     const BUF_SIZE: usize,
 > {
-    note: &'a mut Notecard<IOM, BUF_SIZE>,
+    note: &'a mut Notecard<IOM, D, BUF_SIZE>,
     _r: PhantomData<T>,
 }
 
@@ -534,10 +536,11 @@ impl<
         'a,
         T: DeserializeOwned,
         IOM: Channel,
+        D: DelayNs,
         const BUF_SIZE: usize,
-    > FutureResponse<'a, T, IOM, BUF_SIZE>
+    > FutureResponse<'a, T, IOM, D, BUF_SIZE>
 {
-    fn from(note: &'a mut Notecard<IOM, BUF_SIZE>) -> FutureResponse<'a, T, IOM, BUF_SIZE> {
+    fn from(note: &'a mut Notecard<IOM, D, BUF_SIZE>) -> FutureResponse<'a, T, IOM, D, BUF_SIZE> {
         FutureResponse {
             note,
             _r: PhantomData,
@@ -623,12 +626,12 @@ impl<
 mod tests {
     use super::*;
     // use embedded_hal_mock::eh1::delay::StdSleep;
-    use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, /*Transaction*/};
+    use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock as I2cMock};
 
     pub fn new_mock() -> Notecard<I2cMock> {
         // let exp = [ Transaction::write(0x17, vec![]) ];
         let i2c = I2cMock::new(&[]);
-        Notecard::new(i2c)
+        Notecard::new(i2c, NoopDelay)
     }
 
     #[test]

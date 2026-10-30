@@ -1,7 +1,6 @@
 use core::cmp::min;
 
 use defmt::{debug, error, trace, warn};
-use embassy_time::{Duration, Instant};
 use embedded_hal::{delay::DelayNs, i2c::{self, Operation}};
 use embedded_io::{Error, ErrorKind, ErrorType, Read, ReadReady, Write};
 
@@ -26,7 +25,6 @@ pub struct I2cChannel<T, D> {
     addr: i2c::SevenBitAddress,
     config: NotecardConfig,
     delay: D,
-    next_write_ok_at: Instant,
 }
 
 const ALLOC_CHUNK: usize = 128;
@@ -37,7 +35,7 @@ const CHAR_CR: u8 = b'\r';
 const NOTE_I2C_HEADER_SIZE: usize = 2;
 const NOTE_I2C_MTU_MAX: usize = u8::MAX as usize - NOTE_I2C_HEADER_SIZE;
 
-const CARD_RESET_DRAIN_MS: u64 = 500;
+const CARD_RESET_DRAIN_MS: u32 = 500;
 const CARD_RESET_SYNC_RETRIES: usize = 10;
 
 const CARD_REQUEST_I2C_SEGMENT_DELAY_MS: u32 = 250;
@@ -55,7 +53,6 @@ where
             addr: 0x17,
             config: NotecardConfig::default(),
             delay,
-            next_write_ok_at: Instant::now(),
         }
     }
 
@@ -225,16 +222,10 @@ where
 
         trace!("write: sending payload {}, writing {}", payload_size, 1 + payload_size);
 
-        let now = Instant::now();
-        let ms_until_write_ok = if now >= self.next_write_ok_at { 0 } else { (self.next_write_ok_at - now).as_millis() as u32 };
-        if ms_until_write_ok > 0 {
-            trace!("write: waiting for {} ms", ms_until_write_ok);
-            self.delay.delay_ms(ms_until_write_ok);
-        }
-
         self.i2c_transmit(payload)?;
 
-        self.next_write_ok_at = Instant::now() + Duration::from_millis(self.config.segment_delay.into());
+        trace!("write: waiting for {} ms", self.config.segment_delay);
+        self.delay.delay_ms(self.config.segment_delay);
 
         Ok(payload_size)
     }
@@ -279,10 +270,9 @@ where
             let mut something_found = false;
             let mut non_control_char_found = false;
 
-            let timeout_duration = Duration::from_millis(CARD_RESET_DRAIN_MS);
-            let mut timeout = Instant::now() + timeout_duration;
+            let mut waited = 0;
 
-            while Instant::now() < timeout {
+            while waited < CARD_RESET_DRAIN_MS {
 
                 let mut buffer = [0_u8; ALLOC_CHUNK];
                 chunk_len = min(chunk_len, buffer.len());
@@ -293,6 +283,7 @@ where
                     Err(e) => {
                         error!("i2c: error encountered during I2C receive hook execution: {}", e);
                         self.delay.delay_ms(CARD_REQUEST_I2C_SEGMENT_DELAY_MS);
+                        waited += CARD_REQUEST_I2C_SEGMENT_DELAY_MS;
                         continue;
                     }
                 };
@@ -302,7 +293,7 @@ where
                     for &ch in &buffer[..chunk_len] {
                         if ch != CHAR_LF && ch != CHAR_CR {
                             non_control_char_found = true;
-                            timeout = Instant::now() + timeout_duration;
+                            waited = 0;
                         }
                     }
                 }
@@ -310,6 +301,7 @@ where
                 chunk_len = min(available, 0xffff);
 
                 self.delay.delay_ms(CARD_REQUEST_I2C_CHUNK_DELAY_MS);
+                waited += CARD_REQUEST_I2C_CHUNK_DELAY_MS;
             }
 
             if !something_found || non_control_char_found {

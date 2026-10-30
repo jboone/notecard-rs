@@ -16,12 +16,12 @@ pub enum TemplateFormat {
     Compact,
 }
 
-pub struct Note<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct Note<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
-impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> Note<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> Note<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> Note<'_, IOM, D, BS> {
         Note { note }
     }
 
@@ -34,15 +34,13 @@ impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
     /// seems to work.
     pub async fn add<T: Serialize + Default>(
         self,
-        delay: &mut impl DelayNs,
         file: Option<&str>,
         note: Option<&str>,
         body: Option<T>,
         payload: Option<&str>,
         sync: bool,
-    ) -> Result<FutureResponse<'a, res::Add, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Add, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Add::<T> {
                 req: "note.add",
                 file: str_string(file)?,
@@ -59,15 +57,13 @@ impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
     /// Updates a Note in a DB Notefile by its ID, replacing the existing body and/or payload.
     pub async fn update<T: Serialize + Default>(
         self,
-        delay: &mut impl DelayNs,
         file: &str,
         note: &str,
         body: Option<T>,
         payload: Option<&str>,
         verify: bool,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Update::<T> {
                 req: "note.update",
                 file: heapless::String::try_from(file).map_err(NoteError::string_err)?,
@@ -88,14 +84,12 @@ impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
     /// .qo/.qos Notes must be read from the Notehub event table using the Notehub Event API.
     pub async fn get<T: DeserializeOwned + Serialize>(
         self,
-        delay: &mut impl DelayNs,
         file: &str,
         note: &str,
         delete: bool,
         deleted: bool,
-    ) -> Result<FutureResponse<'a, res::Get<T>, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Get<T>, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Get {
                 req: "note.get",
                 file: heapless::String::try_from(file).map_err(NoteError::string_err)?,
@@ -110,12 +104,10 @@ impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
     /// Deletes Notefiles from a DB Notefile by its Note ID. To delete Notes from a .qi Notefile, use note.get or note.changes with delete:true.
     pub async fn delete(
         self,
-        delay: &mut impl DelayNs,
         file: &str,
         note: &str,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Delete {
                 req: "note.delete",
                 file: heapless::String::try_from(file).map_err(NoteError::string_err)?,
@@ -139,14 +131,13 @@ impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
     /// for the format and values of the template.
     pub async fn template<T: Serialize + Default>(
         self,
-        delay: &mut impl DelayNs,
         file: Option<&str>,
         body: Option<T>,
         length: Option<u32>,
         format: TemplateFormat,
         port: Option<u32>,
         delete: Option<bool>,
-    ) -> Result<FutureResponse<'a, res::Template, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Template, IOM, D, BS>, NoteError> {
         if let Some(port) = port && !(1..=100).contains(&port) {
                 return Err(NoteError::InvalidRequest);
         }
@@ -157,7 +148,6 @@ impl<'a, IOM: Channel, const BS: usize> Note<'a, IOM, BS> {
         };
 
         self.note.request(
-            delay,
             req::Template::<T> {
                 req: "note.template",
                 file: str_string(file)?,

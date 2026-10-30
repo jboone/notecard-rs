@@ -9,8 +9,8 @@ use crate::channel::asynch::Channel;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct NTN<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct NTN<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
 #[derive(Clone, Copy, defmt::Format)]
@@ -22,17 +22,16 @@ pub enum NtnSetGps {
     Starnote,
 }
 
-impl<'a, IOM: Channel, const BS: usize> NTN<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> NTN<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> NTN<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> NTN<'_, IOM, D, BS> {
         NTN { note }
     }
 
     /// Once a Notecard is connected to a Starnote device, the presence of a physical Starnote is stored in a permanent configuration that is not affected by a card.restore request. This request clears this configuration and allows you to return to testing NTN mode over cellular or Wi-Fi.
     pub async fn reset<const PS: usize>(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
-        self.note.request_raw(delay, b"{\"req\":\"ntn.reset\"}\n").await?;
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
+        self.note.request_raw(b"{\"req\":\"ntn.reset\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
@@ -40,10 +39,9 @@ impl<'a, IOM: Channel, const BS: usize> NTN<'a, IOM, BS> {
     /// firmware updates.
     pub async fn status(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Status, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Status, IOM, D, BS>, NoteError> {
         self.note
-            .request_raw(delay, b"{\"req\":\"ntn.status\"}\n").await?;
+            .request_raw(b"{\"req\":\"ntn.status\"}\n").await?;
 
         Ok(FutureResponse::from(self.note))
     }
@@ -51,11 +49,9 @@ impl<'a, IOM: Channel, const BS: usize> NTN<'a, IOM, BS> {
     /// Determines whether a Notecard should override a paired Starnote's GPS/GNSS location with its own GPS/GNSS location. The paired Starnote uses its own GPS/GNSS location by default.
     pub async fn gps(
         self,
-        delay: &mut impl DelayNs,
         gps: Option<NtnSetGps>,
-    ) -> Result<FutureResponse<'a, res::Gps, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Gps, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Gps {
                 req: "ntn.gps",
                 on: gps.map(|g| matches!(g, NtnSetGps::Notecard)),

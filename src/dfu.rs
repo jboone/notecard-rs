@@ -9,12 +9,12 @@ use crate::channel::asynch::Channel;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct DFU<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct DFU<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
-impl<'a, IOM: Channel, const BS: usize> DFU<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> DFU<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> DFU<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> DFU<'_, IOM, D, BS> {
         DFU { note }
     }
 
@@ -23,12 +23,10 @@ impl<'a, IOM: Channel, const BS: usize> DFU<'a, IOM, BS> {
     /// dfu mode with a `hub.set`, `mode:dfu` request.
     pub async fn get<const PS: usize>(
         self,
-        delay: &mut impl DelayNs,
         length: usize,
         offset: Option<usize>,
-    ) -> Result<FutureResponse<'a, res::Get<PS>, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Get<PS>, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Get {
                 req: "dfu.get",
                 length,
@@ -43,7 +41,6 @@ impl<'a, IOM: Channel, const BS: usize> DFU<'a, IOM, BS> {
     /// firmware updates.
     pub async fn status(
         self,
-        delay: &mut impl DelayNs,
         name: Option<req::StatusName>,
         stop: Option<bool>,
         status: Option<&str>,
@@ -51,9 +48,8 @@ impl<'a, IOM: Channel, const BS: usize> DFU<'a, IOM, BS> {
         vvalue: Option<&str>, // This is not JSON :(
         on: Option<bool>,
         err: Option<&str>,
-    ) -> Result<FutureResponse<'a, res::Status, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Status, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Status::new(name, stop, status, version, vvalue, on, err),
         ).await?;
 

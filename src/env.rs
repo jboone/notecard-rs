@@ -5,21 +5,19 @@ use crate::channel::asynch::Channel;
 
 use super::{FutureResponse, NoteError, Notecard};
 
-pub struct Env<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct Env<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
-impl<'a, IOM: Channel, const BS: usize> Env<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> Env<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> Env<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> Env<'_, IOM, D, BS> {
         Env { note }
     }
 
     pub async fn get<T: DeserializeOwned>(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Get<T>, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Get<T>, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Get {
                 req: "env.get",
                 name: None,

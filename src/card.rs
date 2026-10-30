@@ -9,8 +9,8 @@ use crate::channel::asynch::Channel;
 
 use super::{str_string, FutureResponse, NoteError, Notecard};
 
-pub struct Card<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct Card<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
 /// https://dev.blues.io/api-reference/notecard-api/card-requests/latest/#card-transport
@@ -64,8 +64,8 @@ impl GpioMode {
     }
 }
 
-impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> Card<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> Card<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> Card<'_, IOM, D, BS> {
         Card { note }
     }
 
@@ -74,46 +74,41 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// this request will return `{"zone":"UTC,Unknown"}`.
     pub async fn time(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Time, IOM, BS>, NoteError> {
-        self.note.request_raw(delay, b"{\"req\":\"card.time\"}\n").await?;
+    ) -> Result<FutureResponse<'a, res::Time, IOM, D, BS>, NoteError> {
+        self.note.request_raw(b"{\"req\":\"card.time\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
     /// Returns general information about the Notecard's operating status.
     pub async fn status(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Status, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Status, IOM, D, BS>, NoteError> {
         self.note
-            .request_raw(delay, b"{\"req\":\"card.status\"}\n").await?;
+            .request_raw(b"{\"req\":\"card.status\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
     /// Performs a firmware restart of the Notecard.
     pub async fn restart(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Empty, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Empty, IOM, D, BS>, NoteError> {
         self.note
-            .request_raw(delay, b"{\"req\":\"card.restart\"}\n").await?;
+            .request_raw(b"{\"req\":\"card.restart\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
     /// Retrieves the current location of the Notecard.
     pub async fn location(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Location, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Location, IOM, D, BS>, NoteError> {
         self.note
-            .request_raw(delay, b"{\"req\":\"card.location\"}\n").await?;
+            .request_raw(b"{\"req\":\"card.location\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
     /// Sets location-related configuration settings. Retrieves the current location mode when passed with no argument.
     pub async fn location_mode(
         self,
-        delay: &mut impl DelayNs,
         mode: Option<&str>,
         seconds: Option<u32>,
         vseconds: Option<&str>,
@@ -122,9 +117,8 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
         lat: Option<f32>,
         lon: Option<f32>,
         minutes: Option<u32>,
-    ) -> Result<FutureResponse<'a, res::LocationMode, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::LocationMode, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::LocationMode {
                 req: "card.location.mode",
                 mode: str_string(mode)?,
@@ -144,15 +138,13 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// Only available when `card.location.mode` has been set to `periodic`.
     pub async fn location_track(
         self,
-        delay: &mut impl DelayNs,
         start: bool,
         heartbeat: bool,
         sync: bool,
         hours: Option<i32>,
         file: Option<&str>,
-    ) -> Result<FutureResponse<'a, res::LocationTrack, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::LocationTrack, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::LocationTrack {
                 req: "card.location.track",
                 start: start.then_some(true),
@@ -169,14 +161,12 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
 
     pub async fn wireless(
         self,
-        delay: &mut impl DelayNs,
         mode: Option<&str>,
         apn: Option<&str>,
         method: Option<&str>,
         hours: Option<u32>,
-    ) -> Result<FutureResponse<'a, res::Wireless, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Wireless, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Wireless {
                 req: "card.wireless",
                 mode: str_string(mode)?,
@@ -191,28 +181,25 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
 
     pub async fn binary(
         self,
-        delay: &mut impl DelayNs,
         delete: bool,
-    ) -> Result<FutureResponse<'a, res::Binary, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Binary, IOM, D, BS>, NoteError> {
         let request: &[u8] = if delete {
             br#"{"req":"card.binary","delete":true}\n"#
         } else {
             br#"{"req":"card.binary"}\n"#
         };
         self.note
-            .request_raw(delay, request).await?;
+            .request_raw(request).await?;
         Ok(FutureResponse::from(self.note))
     }
 
     pub async fn binary_put(
         self,
-        delay: &mut impl DelayNs,
         cobs: Option<u32>,
         offset: Option<u32>,
         status: Option<&str>,
-    ) -> Result<FutureResponse<'a, res::BinaryPut, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::BinaryPut, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::BinaryPut {
                 req: "card.binary.put",
                 cobs,
@@ -227,10 +214,9 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// Returns firmware version information for the Notecard.
     pub async fn version(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Version, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Version, IOM, D, BS>, NoteError> {
         self.note
-            .request_raw(delay, b"{\"req\":\"card.version\"}\n").await?;
+            .request_raw(b"{\"req\":\"card.version\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
@@ -238,25 +224,22 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// Added in v3.5.1 Notecard Firmware.
     pub async fn dfu(
         self,
-        delay: &mut impl DelayNs,
         name: Option<req::DFUName>,
         on: Option<bool>,
         stop: Option<bool>,
-    ) -> Result<FutureResponse<'a, res::DFU, IOM, BS>, NoteError> {
-        self.note.request(delay, req::DFU::new(name, on, stop)).await?;
+    ) -> Result<FutureResponse<'a, res::DFU, IOM, D, BS>, NoteError> {
+        self.note.request(req::DFU::new(name, on, stop)).await?;
         Ok(FutureResponse::from(self.note))
     }
 
     pub async fn transport(
         self,
-        delay: &mut impl DelayNs,
         method: Transport,
         allow: Option<bool>,
         umin: Option<bool>,
         seconds: Option<u32>,
-    ) -> Result<FutureResponse<'a, res::Transport, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Transport, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Transport {
                 req: "card.transport",
                 method: method.str(),
@@ -273,9 +256,8 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// https://dev.blues.io/api-reference/notecard-api/card-requests/latest/#card-aux
     pub async fn aux_off(
         self,
-        delay: &mut impl DelayNs,
-    ) -> Result<FutureResponse<'a, res::Aux, IOM, BS>, NoteError> {
-        self.note.request_raw(delay, b"{\"req\":\"card.aux\", \"mode\":\"off\"}\n").await?;
+    ) -> Result<FutureResponse<'a, res::Aux, IOM, D, BS>, NoteError> {
+        self.note.request_raw(b"{\"req\":\"card.aux\", \"mode\":\"off\"}\n").await?;
         Ok(FutureResponse::from(self.note))
     }
 
@@ -284,14 +266,12 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// https://dev.blues.io/api-reference/notecard-api/card-requests/latest/#card-aux
     pub async fn aux_gpio(
         self,
-        delay: &mut impl DelayNs,
         aux1: GpioMode,
         aux2: GpioMode,
         aux3: GpioMode,
         aux4: GpioMode,
-    ) -> Result<FutureResponse<'a, res::Aux, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Aux, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Aux {
                 req: "card.aux",
                 mode: "gpio",
@@ -305,7 +285,6 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
     /// https://dev.blues.io/api-reference/notecard-api/card-requests/latest/#card-aux-serial
     pub async fn aux_serial(
         self,
-        delay: &mut impl DelayNs,
         duration: Option<u32>,
         limit: Option<bool>,
         max: Option<i32>,
@@ -313,9 +292,8 @@ impl<'a, IOM: Channel, const BS: usize> Card<'a, IOM, BS> {
         mode: Option<&str>,
         ms: Option<i32>,
         rate: Option<i32>,
-    ) -> Result<FutureResponse<'a, res::AuxSerial, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::AuxSerial, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::AuxSerial {
                 req: "card.aux.serial",
                 duration,

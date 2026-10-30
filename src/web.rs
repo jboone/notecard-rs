@@ -9,19 +9,18 @@ use crate::channel::asynch::Channel;
 
 use super::{str_string, FutureResponse, NoteError, Notecard};
 
-pub struct Web<'a, IOM: Channel, const BS: usize> {
-    note: &'a mut Notecard<IOM, BS>,
+pub struct Web<'a, IOM: Channel, D: DelayNs, const BS: usize> {
+    note: &'a mut Notecard<IOM, D, BS>,
 }
 
-impl<'a, IOM: Channel, const BS: usize> Web<'a, IOM, BS> {
-    pub fn from(note: &mut Notecard<IOM, BS>) -> Web<'_, IOM, BS> {
+impl<'a, IOM: Channel, D: DelayNs, const BS: usize> Web<'a, IOM, D, BS> {
+    pub fn from(note: &mut Notecard<IOM, D, BS>) -> Web<'_, IOM, D, BS> {
         Web { note }
     }
 
     /// Performs a simple HTTP or HTTPS POST request against an external endpoint, and returns the response to the Notecard.
     pub async fn post<T: Serialize + Default>(
         self,
-        delay: &mut impl DelayNs,
         route: &str,
         name: Option<&str>,
         body: Option<T>,
@@ -31,9 +30,8 @@ impl<'a, IOM: Channel, const BS: usize> Web<'a, IOM, BS> {
         max: Option<u16>,
         verify: Option<bool>,
         nasync: Option<bool>,
-    ) -> Result<FutureResponse<'a, res::Post, IOM, BS>, NoteError> {
+    ) -> Result<FutureResponse<'a, res::Post, IOM, D, BS>, NoteError> {
         self.note.request(
-            delay,
             req::Post::<T> {
                 req: "web.post",
                 route: heapless::String::try_from(route).map_err(NoteError::string_err)?,

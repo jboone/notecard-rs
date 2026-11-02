@@ -7,71 +7,67 @@ use embedded_io_async::{ErrorType, Read, ReadReady, Write};
 use crate::channel::{BaudRate, Error};
 use super::Channel;
 
-pub struct UartChannel<T, U, D> {
-    uart_tx: T,
-    uart_rx: U,
+pub struct UartChannel<U, D> {
+    uart: U,
     delay: D,
 }
 
-impl<T, U, D> UartChannel<T, U, D>
+impl<U, D> UartChannel<U, D>
 where
-    T: Write,
-    U: Read + ReadReady,
+    U: Write + Read + ReadReady,
     D: DelayNs,
 {
-    pub fn new_async(uart_tx: T, uart_rx: U, delay: D) -> Self {
+    pub fn new_async(uart: U, delay: D) -> Self {
         Self {
-            uart_tx,
-            uart_rx,
+            uart,
             delay,
         }
     }
 }
 
-impl<T, U, D> ErrorType for UartChannel<T, U, D> {
+impl<U, D> ErrorType for UartChannel<U, D> {
     type Error = crate::channel::Error;
 }
 
-impl<T, U, D> Read for UartChannel<T, U, D>
+impl<U, D> Read for UartChannel<U, D>
 where
     U: Read
 {
     async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let count = self.uart_rx.read(buf).await.map_err(|_| Error::Read)?;
+        let count = self.uart.read(buf).await.map_err(|_| Error::Read)?;
         trace!("uart: read {:a}", &buf[..count]);
         Ok(count)
     }
 }
 
-impl<T, U, D> ReadReady for UartChannel<T, U, D>
+impl<U, D> ReadReady for UartChannel<U, D>
 where
     U: ReadReady
 {
     fn read_ready(&mut self) -> Result<bool, Self::Error> {
-        self.uart_rx.read_ready().map_err(|_| Error::Read)
+        self.uart.read_ready().map_err(|_| Error::Read)
     }
 }
 
-impl<T, U, D> Write for UartChannel<T, U, D>
+impl<U, D> Write for UartChannel<U, D>
 where
-    T: Write
+    U: Write
 {
     async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         trace!("uart: write {:a}", buf);
-        self.uart_tx.write(buf).await.map_err(|_| Error::Write)
+        self.uart.write(buf).await.map_err(|_| Error::Write)
     }
 
     async fn flush(&mut self) -> Result<(), Self::Error> {
-        self.uart_tx.flush().await.map_err(|_| Error::Write)
+        self.uart.flush().await.map_err(|_| Error::Write)
     }
 }
 
 const CARD_RESET_DRAIN_MS: u32 = 500;
 
-impl<T, U, D> Channel for UartChannel<T, U, D>
+impl<U, D> Channel for UartChannel<U, D>
 where
-    T: Write,
-    U: Read + ReadReady,
+    U: Write + Read + ReadReady,
     D: DelayNs,
 {
     async fn ping(&mut self) -> Result<bool, Self::Error> {
@@ -146,22 +142,19 @@ where
     }
 }
 
-impl<T, U, D> BaudRate for UartChannel<T, U, D>
+impl<U, D> BaudRate for UartChannel<U, D>
 where
-    T: Write + BaudRate,
-    U: Read + ReadReady + BaudRate,
+    U: Write + Read + ReadReady + BaudRate,
 {
     fn set_baudrate(&mut self, rate: u32) -> Result<(), Error> {
-        self.uart_tx.set_baudrate(rate)?;
-        self.uart_rx.set_baudrate(rate)?;
+        self.uart.set_baudrate(rate)?;
         Ok(())
     }
 }
 
-impl<T, U, D> super::BaudRateNegotiate for UartChannel<T, U, D>
+impl<U, D> super::BaudRateNegotiate for UartChannel<U, D>
 where
-    T: Write + BaudRate,
-    U: Read + ReadReady + BaudRate,
+    U: Write + Read + ReadReady + BaudRate,
     D: DelayNs,
 {
     /// Function assumes UART is already configured for preferred rate.

@@ -69,6 +69,34 @@ impl<'a, IOM: Channel, D: DelayNs, const BS: usize> Card<'a, IOM, D, BS> {
         Card { note }
     }
 
+    pub async fn attn(
+        self,
+        files: Option<&'a str>,
+        mode: Option<&str>,
+        off: Option<bool>,
+        on: Option<bool>,
+        payload: Option<&str>,
+        seconds: Option<usize>,
+        start: Option<bool>,
+        verify: Option<bool>,
+    ) -> Result<FutureResponse<'a, res::Attn, IOM, D, BS>, NoteError> {
+        let files: Option<heapless::Vec<&'a str, 8>> = files.map(|s| s.split(",").collect());
+        self.note.request(
+            req::Attn {
+                req: "card.attn",
+                files,
+                mode: str_string(mode)?,
+                off,
+                on,
+                payload: str_string(payload)?,
+                seconds,
+                start,
+                verify,
+            },
+        ).await?;
+        Ok(FutureResponse::from(self.note))
+    }
+
     /// Retrieves current date and time information. Upon power-up, the Notecard must complete a
     /// sync to Notehub in order to obtain time and location data. Before the time is obtained,
     /// this request will return `{"zone":"UTC,Unknown"}`.
@@ -321,6 +349,35 @@ pub mod req {
     }
 
     #[derive(Deserialize, Serialize, Debug, defmt::Format, Default)]
+    pub struct Attn<'a> {
+        pub req: &'a str,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub files: Option<heapless::Vec<&'a str, 8>>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub mode: Option<heapless::String<128>>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub off: Option<bool>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub on: Option<bool>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub payload: Option<heapless::String<128>>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub seconds: Option<usize>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub start: Option<bool>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub verify: Option<bool>,
+    }
+
+    #[derive(Deserialize, Serialize, Debug, defmt::Format, Default)]
     pub struct AuxSerial {
         pub req: &'static str,
 
@@ -502,6 +559,15 @@ pub mod res {
 
     #[derive(Deserialize, Debug, defmt::Format)]
     pub struct Empty {}
+
+    #[derive(Deserialize, Debug, defmt::Format)]
+    pub struct Attn {
+        pub files: Option<heapless::Vec<heapless::String<16>, 8>>,
+        pub off: Option<bool>,
+        pub payload: Option<heapless::String<128>>,
+        pub set: Option<bool>,
+        pub time: Option<u64>,
+    }
 
     #[derive(Deserialize, Debug, defmt::Format)]
     pub struct LocationTrack {

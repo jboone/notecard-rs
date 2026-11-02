@@ -469,7 +469,7 @@ impl<IOM: Channel, D: DelayNs, const BUF_SIZE: usize>
     /// Make a request. After making a request a [FutureResponse] must be created and consumed
     /// before making any new requests. This method is usually called through the API methods like
     /// `[card]`.
-    pub(crate) async fn request<T: Serialize>(
+    pub(crate) async fn request<'a, T: Serialize>(
         &mut self,
         cmd: T,
     ) -> Result<(), NoteError> {
